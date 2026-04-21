@@ -123,12 +123,17 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="hero">
-        <div>
-          <p className="eyebrow">Order Urgency App v1</p>
-          <h1>Deadlines that are visible enough to matter.</h1>
+        <div className="hero-copy">
+          <p className="eyebrow">Annell App</p>
+          <h1>Keep handmade orders calm, visible, and on time.</h1>
           <p className="subtext">
-            A Windows-first urgency board for handmade sellers, built to keep Shopify and Etsy orders from quietly drifting into disaster.
+            A gentle urgency board for handmade shops, designed to make deadlines obvious without turning the whole room into a panic spiral.
           </p>
+          <div className="hero-chips">
+            <span className="hero-chip">Shopify sync</span>
+            <span className="hero-chip">Reminders</span>
+            <span className="hero-chip">Manual backup entry</span>
+          </div>
           {loading ? <p className="status-note">Loading orders…</p> : null}
           {error ? <p className="status-error">{error}</p> : null}
           {!error && lastSyncAt ? <p className="status-note">Last synced at {lastSyncAt}</p> : null}
