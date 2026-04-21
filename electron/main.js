@@ -7,7 +7,8 @@ let db;
 
 const SETTINGS_DEFAULTS = {
   shopifyStoreDomain: '',
-  shopifyAccessToken: '',
+  shopifyClientId: '',
+  shopifyClientSecret: '',
   shopifyProductionDays: 5,
 };
 
@@ -115,12 +116,42 @@ function saveSettings(nextSettings) {
   return getSettings();
 }
 
+async function getShopifyAccessToken(settings) {
+  const storeDomain = settings.shopifyStoreDomain;
+  const clientId = settings.shopifyClientId;
+  const clientSecret = settings.shopifyClientSecret;
+  if (!storeDomain || !clientId || !clientSecret) {
+    throw new Error('Missing Shopify store domain, client ID, or client secret');
+  }
+
+  const response = await fetch(`https://${storeDomain}/admin/oauth/access_token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'client_credentials',
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Shopify token exchange failed (${response.status}): ${body}`);
+  }
+
+  const payload = await response.json();
+  if (!payload.access_token) {
+    throw new Error('Shopify token exchange returned no access token');
+  }
+
+  return payload.access_token;
+}
+
 async function fetchShopifyOrders(settings) {
   const storeDomain = settings.shopifyStoreDomain;
-  const accessToken = settings.shopifyAccessToken;
-  if (!storeDomain || !accessToken) {
-    throw new Error('Missing Shopify store domain or Admin API token');
-  }
+  const accessToken = await getShopifyAccessToken(settings);
 
   const response = await fetch(`https://${storeDomain}/admin/api/2025-01/graphql.json`, {
     method: 'POST',

@@ -1,9 +1,3 @@
-export function maskToken(token) {
-  if (!token) return '';
-  if (token.length <= 8) return '•'.repeat(token.length);
-  return `${token.slice(0, 4)}${'•'.repeat(Math.max(4, token.length - 8))}${token.slice(-4)}`;
-}
-
 export function normalizeStoreDomain(input) {
   const value = String(input || '').trim().toLowerCase();
   if (!value) return '';

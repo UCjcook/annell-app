@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
-import { maskToken, normalizeStoreDomain } from '../lib/shopify';
+import { normalizeStoreDomain } from '../lib/shopify';
 
 export default function SettingsPanel({ settings, onSave, onSync, syncing, syncMessage }) {
   const [storeDomain, setStoreDomain] = useState(settings?.shopifyStoreDomain || '');
-  const [accessToken, setAccessToken] = useState(settings?.shopifyAccessToken || '');
+  const [clientId, setClientId] = useState(settings?.shopifyClientId || '');
+  const [clientSecret, setClientSecret] = useState(settings?.shopifyClientSecret || '');
   const [productionDays, setProductionDays] = useState(String(settings?.shopifyProductionDays ?? 5));
   const [savedNotice, setSavedNotice] = useState('');
 
   useEffect(() => {
     setStoreDomain(settings?.shopifyStoreDomain || '');
-    setAccessToken(settings?.shopifyAccessToken || '');
+    setClientId(settings?.shopifyClientId || '');
+    setClientSecret(settings?.shopifyClientSecret || '');
     setProductionDays(String(settings?.shopifyProductionDays ?? 5));
   }, [settings]);
 
@@ -17,7 +19,8 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
     event.preventDefault();
     const payload = {
       shopifyStoreDomain: normalizeStoreDomain(storeDomain),
-      shopifyAccessToken: accessToken.trim(),
+      shopifyClientId: clientId.trim(),
+      shopifyClientSecret: clientSecret.trim(),
       shopifyProductionDays: Math.max(1, Number.parseInt(productionDays, 10) || 5),
     };
     await onSave(payload);
@@ -49,14 +52,23 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
         </label>
 
         <label>
-          <span>Admin API access token</span>
+          <span>Client ID</span>
+          <input
+            type="text"
+            placeholder="Shopify client id"
+            value={clientId}
+            onChange={(event) => setClientId(event.target.value)}
+          />
+        </label>
+
+        <label>
+          <span>Client secret</span>
           <input
             type="password"
-            placeholder="shpat_..."
-            value={accessToken}
-            onChange={(event) => setAccessToken(event.target.value)}
+            placeholder="shpss_..."
+            value={clientSecret}
+            onChange={(event) => setClientSecret(event.target.value)}
           />
-          {settings?.shopifyAccessToken ? <small>Saved token: {maskToken(settings.shopifyAccessToken)}</small> : null}
         </label>
 
         <label>
@@ -78,7 +90,7 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
       </form>
 
       <div className="settings-hint">
-        Needs a Shopify Admin token with order read access. For v1, read-only is fine.
+        Uses Shopify client-credentials auth. The app requests an access token programmatically when syncing.
       </div>
     </section>
   );
