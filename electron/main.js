@@ -1,4 +1,4 @@
-const { app, BrowserWindow, nativeTheme, ipcMain } = require('electron');
+const { app, BrowserWindow, nativeTheme, ipcMain, Notification } = require('electron');
 const path = require('path');
 const Database = require('better-sqlite3');
 
@@ -74,6 +74,14 @@ function initDb() {
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS reminders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_number TEXT NOT NULL,
+      reminder_type TEXT NOT NULL,
+      sent_at TEXT NOT NULL,
+      UNIQUE(order_number, reminder_type, sent_at)
     );
   `);
 }
@@ -193,17 +201,37 @@ function upsertOrders(rows) {
   tx(rows);
 }
 
+function clearDemoOrders() {
+  db.prepare(`
+    DELETE FROM orders
+    WHERE notes LIKE 'demo:%'
+  `).run();
+}
+
 async function syncShopifyOrders() {
   const settings = getSettings();
   const productionDays = Number.parseInt(settings.shopifyProductionDays, 10) || 5;
   const orders = await fetchShopifyOrders(settings);
   const normalized = orders.map((order) => localOrderFromShopify(order, productionDays));
+  if (normalized.length > 0) {
+    clearDemoOrders();
+  }
   upsertOrders(normalized);
+  processReminders();
   return { ok: true, imported: normalized.length };
 }
 
 function seedDemoData() {
-  const count = db.prepare('SELECT COUNT(*) as count FROM orders').get().count;
+  const existingRealOrder = db.prepare(`
+    SELECT 1 FROM orders
+    WHERE notes NOT LIKE 'demo:%'
+    LIMIT 1
+  `).get();
+  if (existingRealOrder) return;
+  const count = db.prepare(`
+    SELECT COUNT(*) as count FROM orders
+    WHERE notes LIKE 'demo:%'
+  `).get().count;
   if (count > 0) return;
   const now = new Date();
   const insert = db.prepare(`
@@ -225,7 +253,7 @@ function seedDemoData() {
       order_date: new Date(now.getTime() - 1 * 86400000).toISOString(),
       ship_by_date: new Date(now.getTime() + 3 * 86400000).toISOString(),
       status: 'New',
-      notes: '',
+      notes: 'demo: seeded sample order',
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
     },
@@ -238,7 +266,7 @@ function seedDemoData() {
       order_date: new Date(now.getTime() - 4 * 86400000).toISOString(),
       ship_by_date: new Date(now.getTime() + 1 * 86400000).toISOString(),
       status: 'Painting',
-      notes: '',
+      notes: 'demo: seeded sample order',
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
     },
@@ -251,7 +279,7 @@ function seedDemoData() {
       order_date: new Date(now.getTime() - 3 * 86400000).toISOString(),
       ship_by_date: new Date(now.getTime() + 2 * 86400000).toISOString(),
       status: 'Printing',
-      notes: '',
+      notes: 'demo: seeded sample order',
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
     },
@@ -264,7 +292,7 @@ function seedDemoData() {
       order_date: new Date(now.getTime() - 9 * 86400000).toISOString(),
       ship_by_date: new Date(now.getTime() - 2 * 86400000).toISOString(),
       status: 'Problem',
-      notes: 'Waiting on repaint approval',
+      notes: 'demo: Waiting on repaint approval',
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
     },
@@ -277,7 +305,7 @@ function seedDemoData() {
       order_date: new Date(now.getTime() - 12 * 86400000).toISOString(),
       ship_by_date: new Date(now.getTime() - 1 * 86400000).toISOString(),
       status: 'Done',
-      notes: 'Shipped successfully',
+      notes: 'demo: Shipped successfully',
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
     },
@@ -318,6 +346,63 @@ function listOrders() {
       updatedAt: row.updated_at,
     };
   });
+}
+
+function recordReminder(orderNumber, reminderType, sentAt) {
+  db.prepare(`
+    INSERT INTO reminders (order_number, reminder_type, sent_at)
+    VALUES (?, ?, ?)
+  `).run(orderNumber, reminderType, sentAt);
+}
+
+function hasReminderForDay(orderNumber, reminderType, dayKey) {
+  const row = db.prepare(`
+    SELECT sent_at FROM reminders
+    WHERE order_number = ? AND reminder_type = ? AND substr(sent_at, 1, 10) = ?
+    LIMIT 1
+  `).get(orderNumber, reminderType, dayKey);
+  return Boolean(row);
+}
+
+function maybeSendNotification({ title, body }) {
+  if (!Notification.isSupported()) return;
+  new Notification({ title, body }).show();
+}
+
+function processReminders() {
+  const orders = listOrders();
+  const todayKey = new Date().toISOString().slice(0, 10);
+
+  for (const order of orders) {
+    const isDone = order.status === 'Done' || order.status === 'Problem';
+    if (isDone) continue;
+
+    if (order.daysLeft >= 4) continue;
+
+    let reminderType = null;
+    let title = '';
+    let body = '';
+
+    if (order.daysLeft < 0) {
+      reminderType = 'overdue';
+      title = `Overdue: ${order.orderNumber}`;
+      body = `${order.itemsSummary} for ${order.customerName} is ${Math.abs(order.daysLeft)} day${Math.abs(order.daysLeft) === 1 ? '' : 's'} late.`;
+    } else if (order.daysLeft === 1) {
+      reminderType = 'due-tomorrow';
+      title = `Due tomorrow: ${order.orderNumber}`;
+      body = `${order.itemsSummary} for ${order.customerName} ships tomorrow.`;
+    } else if (order.daysLeft === 3) {
+      reminderType = 'due-soon';
+      title = `Due soon: ${order.orderNumber}`;
+      body = `${order.itemsSummary} for ${order.customerName} ships in 3 days.`;
+    }
+
+    if (!reminderType) continue;
+    if (hasReminderForDay(order.orderNumber, reminderType, todayKey)) continue;
+
+    maybeSendNotification({ title, body });
+    recordReminder(order.orderNumber, reminderType, new Date().toISOString());
+  }
 }
 
 function updateOrderStatus({ orderNumber, status }) {
