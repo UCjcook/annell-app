@@ -7,7 +7,8 @@
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
     "dev:renderer": "vite",
     "dev:electron": "wait-on tcp:5173 && electron .",
-    "build": "vite build"
+    "build": "vite build",
+    "dist": "npm run build && electron-builder --win nsis"
   },
   "keywords": [
     "electron",
@@ -19,14 +20,18 @@
   "license": "ISC",
   "dependencies": {
     "better-sqlite3": "^12.9.0",
-    "electron": "^37.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.4",
     "concurrently": "^9.2.1",
+    "electron": "^37.0.0",
+    "electron-builder": "^25.1.8",
     "vite": "^7.1.7",
     "wait-on": "^8.0.5"
+  },
+  "build": {
+    "extends": "./electron-builder.json"
   }
 }

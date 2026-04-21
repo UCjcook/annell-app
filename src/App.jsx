@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import EmptyState from './components/EmptyState';
 import ManualOrderForm from './components/ManualOrderForm';
 import NotesEditor from './components/NotesEditor';
 import SettingsPanel from './components/SettingsPanel';
@@ -6,9 +7,12 @@ import StatusEditor from './components/StatusEditor';
 import { useOrders } from './hooks/useOrders';
 import { useSettings } from './hooks/useSettings';
 import { groupOrders } from './lib/groupOrders';
+import { formatRelativeUrgency, formatShortDate } from './lib/formatting';
 import { getToneForOrder } from './lib/statusTone';
 
 function OrderCard({ order, tone, onStatusChange, onNotesSave, busy }) {
+  const urgencyText = formatRelativeUrgency(order.daysLeft);
+  const orderDateText = formatShortDate(order.orderDate);
   return (
     <div className={`order-card tone-${tone}`}>
       <div className="order-card__top">
@@ -18,8 +22,12 @@ function OrderCard({ order, tone, onStatusChange, onNotesSave, busy }) {
       <h3>{order.item}</h3>
       <p className="customer">{order.customer}</p>
       <div className="meta-row">
+        <span>Ordered {orderDateText}</span>
+        <span>{urgencyText}</span>
+      </div>
+      <div className="meta-row meta-row--secondary">
         <span>{order.shipBy}</span>
-        <span>{order.daysLeft < 0 ? `${Math.abs(order.daysLeft)} late` : `${order.daysLeft} left`}</span>
+        <span>{order.status}</span>
       </div>
       <StatusEditor currentStatus={order.status} onChange={(value) => onStatusChange(order.id, value)} disabled={busy} />
       <NotesEditor initialValue={order.notes} onSave={(value) => onNotesSave(order.id, value)} disabled={busy} />
@@ -35,7 +43,7 @@ function Column({ title, tone, orders, onStatusChange, onNotesSave, busyOrderId 
         <span>{orders.length}</span>
       </div>
       <div className="column__body">
-        {orders.map((order) => (
+        {orders.length ? orders.map((order) => (
           <OrderCard
             key={order.id}
             order={order}
@@ -44,7 +52,7 @@ function Column({ title, tone, orders, onStatusChange, onNotesSave, busyOrderId 
             onNotesSave={onNotesSave}
             busy={busyOrderId === order.id}
           />
-        ))}
+        )) : <EmptyState title={`No ${title.toLowerCase()} orders`} body="That bucket is clear right now." />}
       </div>
     </section>
   );
@@ -55,6 +63,7 @@ export default function App() {
   const { settings, save } = useSettings();
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+  const [lastSyncAt, setLastSyncAt] = useState('');
   const [busyOrderId, setBusyOrderId] = useState('');
   const [manualBusy, setManualBusy] = useState(false);
 
@@ -66,6 +75,7 @@ export default function App() {
       setSyncMessage('');
       const result = await window.orderUrgency.syncShopifyOrders();
       await reload();
+      setLastSyncAt(new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
       setSyncMessage(`Imported ${result.imported} Shopify orders.`);
     } catch (err) {
       setSyncMessage(err.message || 'Shopify sync failed');
@@ -121,6 +131,7 @@ export default function App() {
           </p>
           {loading ? <p className="status-note">Loading orders…</p> : null}
           {error ? <p className="status-error">{error}</p> : null}
+          {!error && lastSyncAt ? <p className="status-note">Last synced at {lastSyncAt}</p> : null}
         </div>
         <div className="hero-stats">
           {heroStats.map((stat) => (
