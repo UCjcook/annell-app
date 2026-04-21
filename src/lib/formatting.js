@@ -13,3 +13,14 @@ export function formatShortDate(value) {
     day: 'numeric',
   });
 }
+
+export function formatTimestamp(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}

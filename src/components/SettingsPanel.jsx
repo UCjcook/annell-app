@@ -6,6 +6,8 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
   const [clientId, setClientId] = useState(settings?.shopifyClientId || '');
   const [clientSecret, setClientSecret] = useState(settings?.shopifyClientSecret || '');
   const [productionDays, setProductionDays] = useState(String(settings?.shopifyProductionDays ?? 5));
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(Boolean(settings?.autoSyncEnabled));
+  const [autoSyncIntervalMinutes, setAutoSyncIntervalMinutes] = useState(String(settings?.autoSyncIntervalMinutes ?? 15));
   const [savedNotice, setSavedNotice] = useState('');
 
   useEffect(() => {
@@ -13,6 +15,8 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
     setClientId(settings?.shopifyClientId || '');
     setClientSecret(settings?.shopifyClientSecret || '');
     setProductionDays(String(settings?.shopifyProductionDays ?? 5));
+    setAutoSyncEnabled(Boolean(settings?.autoSyncEnabled));
+    setAutoSyncIntervalMinutes(String(settings?.autoSyncIntervalMinutes ?? 15));
   }, [settings]);
 
   async function handleSubmit(event) {
@@ -22,11 +26,15 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
       shopifyClientId: clientId.trim(),
       shopifyClientSecret: clientSecret.trim(),
       shopifyProductionDays: Math.max(1, Number.parseInt(productionDays, 10) || 5),
+      autoSyncEnabled,
+      autoSyncIntervalMinutes: Math.max(5, Number.parseInt(autoSyncIntervalMinutes, 10) || 15),
     };
     await onSave(payload);
     setSavedNotice('Saved locally.');
     setTimeout(() => setSavedNotice(''), 2000);
   }
+
+  const hasCredentials = Boolean(storeDomain.trim() && clientId.trim() && clientSecret.trim());
 
   return (
     <section className="settings-panel">
@@ -35,7 +43,7 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
           <p className="eyebrow">Shopify connection</p>
           <h2>Connect the live store</h2>
         </div>
-        <button className="button button-primary" onClick={onSync} disabled={syncing} type="button">
+        <button className="button button-primary" onClick={onSync} disabled={syncing || !hasCredentials} type="button">
           {syncing ? 'Syncing…' : 'Sync Shopify orders'}
         </button>
       </div>
@@ -82,15 +90,35 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
           />
         </label>
 
+        <label>
+          <span>Background auto-sync</span>
+          <select value={autoSyncEnabled ? 'on' : 'off'} onChange={(event) => setAutoSyncEnabled(event.target.value === 'on')}>
+            <option value="off">Off</option>
+            <option value="on">On</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Auto-sync cadence (minutes)</span>
+          <input
+            type="number"
+            min="5"
+            max="240"
+            value={autoSyncIntervalMinutes}
+            onChange={(event) => setAutoSyncIntervalMinutes(event.target.value)}
+            disabled={!autoSyncEnabled}
+          />
+        </label>
+
         <div className="settings-actions">
           <button className="button" type="submit">Save settings</button>
           {savedNotice ? <span className="status-ok">{savedNotice}</span> : null}
-          {syncMessage ? <span className="status-note">{syncMessage}</span> : null}
+          {syncMessage ? <span className={settings?.lastSyncStatus === 'error' ? 'status-error' : 'status-note'}>{syncMessage}</span> : null}
         </div>
       </form>
 
       <div className="settings-hint">
-        Uses Shopify client-credentials auth. The app requests an access token programmatically when syncing.
+        Uses Shopify client-credentials auth. Background sync runs while the desktop app is open, and the latest sync result is saved locally.
       </div>
     </section>
   );

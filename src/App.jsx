@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import EmptyState from './components/EmptyState';
 import ManualOrderForm from './components/ManualOrderForm';
 import NotesEditor from './components/NotesEditor';
@@ -7,7 +7,7 @@ import StatusEditor from './components/StatusEditor';
 import { useOrders } from './hooks/useOrders';
 import { useSettings } from './hooks/useSettings';
 import { groupOrders } from './lib/groupOrders';
-import { formatRelativeUrgency, formatShortDate } from './lib/formatting';
+import { formatRelativeUrgency, formatShortDate, formatTimestamp } from './lib/formatting';
 import { getToneForOrder } from './lib/statusTone';
 
 function OrderCard({ order, tone, onStatusChange, onNotesSave, busy }) {
@@ -59,15 +59,57 @@ function Column({ title, tone, orders, onStatusChange, onNotesSave, busyOrderId 
 }
 
 export default function App() {
-  const { orders, loading, error, reload } = useOrders();
+  const { orders, loading, error, reload, setError } = useOrders();
   const { settings, save } = useSettings();
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
-  const [lastSyncAt, setLastSyncAt] = useState('');
   const [busyOrderId, setBusyOrderId] = useState('');
   const [manualBusy, setManualBusy] = useState(false);
+  const [query, setQuery] = useState('');
+  const [showDone, setShowDone] = useState(true);
 
-  const grouped = useMemo(() => groupOrders(orders), [orders]);
+  useEffect(() => {
+    if (!settings) return;
+    setSyncMessage(settings.lastSyncMessage || '');
+  }, [settings]);
+
+  useEffect(() => {
+    if (!window.orderUrgency?.onSyncState) return undefined;
+
+    const unsubscribe = window.orderUrgency.onSyncState(async (payload) => {
+      setSyncing(payload.lastSyncStatus === 'running');
+      setSyncMessage(payload.lastSyncMessage || '');
+      if (payload.lastSyncStatus === 'ok') {
+        await reload();
+      }
+    });
+
+    return unsubscribe;
+  }, [reload]);
+
+  const filteredOrders = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return orders;
+    return orders.filter((order) => {
+      const haystack = [
+        order.orderNumber,
+        order.customerName,
+        order.itemsSummary,
+        order.sourcePlatform,
+        order.status,
+        order.notes,
+      ].join(' ').toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [orders, query]);
+
+  const grouped = useMemo(() => {
+    const next = groupOrders(filteredOrders);
+    if (!showDone) {
+      next.done = [];
+    }
+    return next;
+  }, [filteredOrders, showDone]);
 
   async function handleSync() {
     try {
@@ -75,10 +117,12 @@ export default function App() {
       setSyncMessage('');
       const result = await window.orderUrgency.syncShopifyOrders();
       await reload();
-      setLastSyncAt(new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
-      setSyncMessage(`Imported ${result.imported} Shopify orders.`);
+      setSyncMessage(result.message || `Imported ${result.imported} Shopify orders.`);
+      setError(null);
     } catch (err) {
-      setSyncMessage(err.message || 'Shopify sync failed');
+      const message = err.message || 'Shopify sync failed';
+      setSyncMessage(message);
+      setError(message);
     } finally {
       setSyncing(false);
     }
@@ -117,8 +161,10 @@ export default function App() {
   const heroStats = [
     { label: 'Overdue', value: grouped.overdue.length },
     { label: 'Due soon', value: grouped.dueSoon.length },
-    { label: 'New', value: grouped.new.length },
+    { label: 'Visible', value: filteredOrders.length },
   ];
+
+  const lastSyncText = settings?.lastSyncAt ? formatTimestamp(settings.lastSyncAt) : '';
 
   return (
     <div className="app-shell">
@@ -131,12 +177,26 @@ export default function App() {
           </p>
           <div className="hero-chips">
             <span className="hero-chip">Shopify sync</span>
-            <span className="hero-chip">Reminders</span>
+            <span className="hero-chip">Desktop reminders</span>
             <span className="hero-chip">Manual backup entry</span>
+            {settings?.autoSyncEnabled ? <span className="hero-chip">Auto-sync on</span> : null}
+          </div>
+          <div className="toolbar">
+            <input
+              className="toolbar__search"
+              type="search"
+              placeholder="Search order, customer, item, note..."
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <label className="toolbar__toggle">
+              <input type="checkbox" checked={showDone} onChange={(event) => setShowDone(event.target.checked)} />
+              <span>Show done</span>
+            </label>
           </div>
           {loading ? <p className="status-note">Loading orders…</p> : null}
           {error ? <p className="status-error">{error}</p> : null}
-          {!error && lastSyncAt ? <p className="status-note">Last synced at {lastSyncAt}</p> : null}
+          {!error && lastSyncText ? <p className="status-note">Last synced {lastSyncText}</p> : null}
         </div>
         <div className="hero-stats">
           {heroStats.map((stat) => (
@@ -162,7 +222,7 @@ export default function App() {
         <Column title="New" tone="new" orders={grouped.new} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
         <Column title="Due Soon" tone="soon" orders={grouped.dueSoon} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
         <Column title="Overdue" tone="overdue" orders={grouped.overdue} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
-        <Column title="Done" tone="done" orders={grouped.done} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
+        {showDone ? <Column title="Done" tone="done" orders={grouped.done} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} /> : null}
       </main>
     </div>
   );

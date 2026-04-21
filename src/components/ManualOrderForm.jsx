@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+const STATUSES = ['New', 'Printing', 'Painting', 'Packing', 'Done', 'Problem'];
+
 const INITIAL_FORM = {
   sourcePlatform: 'Manual',
   orderNumber: '',
@@ -21,7 +23,11 @@ export default function ManualOrderForm({ onSubmit, busy }) {
     event.preventDefault();
     await onSubmit({
       ...form,
-      daysUntilDue: Number.parseInt(form.daysUntilDue, 10) || 5,
+      orderNumber: form.orderNumber.trim(),
+      customerName: form.customerName.trim(),
+      itemsSummary: form.itemsSummary.trim(),
+      notes: form.notes.trim(),
+      daysUntilDue: Math.max(0, Number.parseInt(form.daysUntilDue, 10) || 5),
     });
     setForm(INITIAL_FORM);
   }
@@ -58,11 +64,15 @@ export default function ManualOrderForm({ onSubmit, busy }) {
         </label>
         <label>
           <span>Status</span>
-          <input value={form.status} onChange={(event) => updateField('status', event.target.value)} />
+          <select value={form.status} onChange={(event) => updateField('status', event.target.value)}>
+            {STATUSES.map((status) => (
+              <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
         </label>
         <label className="full-width">
           <span>Notes</span>
-          <input value={form.notes} onChange={(event) => updateField('notes', event.target.value)} />
+          <textarea value={form.notes} onChange={(event) => updateField('notes', event.target.value)} rows={3} />
         </label>
 
         <div className="settings-actions">

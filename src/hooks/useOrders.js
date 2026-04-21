@@ -28,5 +28,5 @@ export function useOrders() {
     load();
   }, [load]);
 
-  return { orders, loading, error, reload: load };
+  return { orders, loading, error, reload: load, setError };
 }

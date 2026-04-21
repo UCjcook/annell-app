@@ -4,12 +4,21 @@ const Database = require('better-sqlite3');
 
 const isDev = !app.isPackaged;
 let db;
+let mainWindow;
+let autoSyncTimer = null;
+let syncInFlight = null;
 
 const SETTINGS_DEFAULTS = {
   shopifyStoreDomain: '',
   shopifyClientId: '',
   shopifyClientSecret: '',
   shopifyProductionDays: 5,
+  autoSyncEnabled: false,
+  autoSyncIntervalMinutes: 15,
+  lastSyncAt: '',
+  lastSyncImported: 0,
+  lastSyncStatus: 'idle',
+  lastSyncMessage: '',
 };
 
 const SHOPIFY_ORDERS_QUERY = `#graphql
@@ -87,32 +96,66 @@ function initDb() {
   `);
 }
 
+function parseSettingValue(key, value) {
+  if (['shopifyProductionDays', 'autoSyncIntervalMinutes', 'lastSyncImported'].includes(key)) {
+    return Number.parseInt(value, 10) || SETTINGS_DEFAULTS[key];
+  }
+  if (key === 'autoSyncEnabled') {
+    return value === 'true';
+  }
+  return value;
+}
+
 function getSettings() {
   const rows = db.prepare('SELECT key, value FROM settings').all();
   const merged = { ...SETTINGS_DEFAULTS };
   for (const row of rows) {
-    if (row.key === 'shopifyProductionDays') {
-      merged[row.key] = Number.parseInt(row.value, 10) || SETTINGS_DEFAULTS.shopifyProductionDays;
-    } else {
-      merged[row.key] = row.value;
-    }
+    merged[row.key] = parseSettingValue(row.key, row.value);
   }
   return merged;
 }
 
-function saveSettings(nextSettings) {
-  const merged = { ...getSettings(), ...nextSettings };
+function persistSettings(entries) {
   const upsert = db.prepare(`
     INSERT INTO settings (key, value)
     VALUES (@key, @value)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `);
-  const tx = db.transaction((entries) => {
-    for (const [key, value] of Object.entries(entries)) {
+  const tx = db.transaction((payload) => {
+    for (const [key, value] of Object.entries(payload)) {
       upsert.run({ key, value: String(value ?? '') });
     }
   });
-  tx(merged);
+  tx(entries);
+}
+
+function broadcastSyncState(patch = {}) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('shopify:sync-state', {
+    ...getSettings(),
+    ...patch,
+  });
+}
+
+function normalizeSettings(nextSettings) {
+  const merged = { ...getSettings(), ...nextSettings };
+  return {
+    ...merged,
+    shopifyProductionDays: Math.max(1, Number.parseInt(merged.shopifyProductionDays, 10) || SETTINGS_DEFAULTS.shopifyProductionDays),
+    autoSyncEnabled: Boolean(merged.autoSyncEnabled),
+    autoSyncIntervalMinutes: Math.max(5, Number.parseInt(merged.autoSyncIntervalMinutes, 10) || SETTINGS_DEFAULTS.autoSyncIntervalMinutes),
+    lastSyncImported: Number.parseInt(merged.lastSyncImported, 10) || 0,
+    lastSyncAt: String(merged.lastSyncAt || ''),
+    lastSyncStatus: String(merged.lastSyncStatus || 'idle'),
+    lastSyncMessage: String(merged.lastSyncMessage || ''),
+  };
+}
+
+function saveSettings(nextSettings) {
+  const normalized = normalizeSettings(nextSettings);
+  persistSettings(normalized);
+  scheduleAutoSync(getSettings());
+  broadcastSyncState();
   return getSettings();
 }
 
@@ -239,17 +282,52 @@ function clearDemoOrders() {
   `).run();
 }
 
-async function syncShopifyOrders() {
-  const settings = getSettings();
-  const productionDays = Number.parseInt(settings.shopifyProductionDays, 10) || 5;
-  const orders = await fetchShopifyOrders(settings);
-  const normalized = orders.map((order) => localOrderFromShopify(order, productionDays));
-  if (normalized.length > 0) {
-    clearDemoOrders();
+async function syncShopifyOrders(trigger = 'manual') {
+  if (syncInFlight) {
+    return syncInFlight;
   }
-  upsertOrders(normalized);
-  processReminders();
-  return { ok: true, imported: normalized.length };
+
+  syncInFlight = (async () => {
+    broadcastSyncState({ lastSyncStatus: 'running', lastSyncMessage: trigger === 'auto' ? 'Auto-sync in progress…' : 'Sync in progress…' });
+    try {
+      const settings = getSettings();
+      const productionDays = Number.parseInt(settings.shopifyProductionDays, 10) || 5;
+      const orders = await fetchShopifyOrders(settings);
+      const normalized = orders.map((order) => localOrderFromShopify(order, productionDays));
+      if (normalized.length > 0) {
+        clearDemoOrders();
+      }
+      upsertOrders(normalized);
+      processReminders();
+      const result = {
+        ok: true,
+        imported: normalized.length,
+        trigger,
+        syncedAt: new Date().toISOString(),
+        message: `Imported ${normalized.length} Shopify order${normalized.length === 1 ? '' : 's'}.`,
+      };
+      saveSettings({
+        lastSyncAt: result.syncedAt,
+        lastSyncImported: result.imported,
+        lastSyncStatus: 'ok',
+        lastSyncMessage: result.message,
+      });
+      broadcastSyncState();
+      return result;
+    } catch (error) {
+      const message = error.message || 'Shopify sync failed';
+      saveSettings({
+        lastSyncStatus: 'error',
+        lastSyncMessage: message,
+      });
+      broadcastSyncState();
+      throw new Error(message);
+    } finally {
+      syncInFlight = null;
+    }
+  })();
+
+  return syncInFlight;
 }
 
 function seedDemoData() {
@@ -495,8 +573,25 @@ function updateOrderNotes({ orderNumber, notes }) {
   return { ok: true };
 }
 
+function scheduleAutoSync(settings = getSettings()) {
+  if (autoSyncTimer) {
+    clearInterval(autoSyncTimer);
+    autoSyncTimer = null;
+  }
+
+  if (!settings.autoSyncEnabled) return;
+  if (!settings.shopifyStoreDomain || !settings.shopifyClientId || !settings.shopifyClientSecret) return;
+
+  const intervalMs = Math.max(5, Number.parseInt(settings.autoSyncIntervalMinutes, 10) || SETTINGS_DEFAULTS.autoSyncIntervalMinutes) * 60000;
+  autoSyncTimer = setInterval(() => {
+    syncShopifyOrders('auto').catch(() => {
+      // status already persisted and broadcast
+    });
+  }, intervalMs);
+}
+
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1100,
@@ -511,10 +606,10 @@ function createWindow() {
   });
 
   if (isDev) {
-    win.loadURL('http://127.0.0.1:5173');
-    win.webContents.openDevTools({ mode: 'detach' });
+    mainWindow.loadURL('http://127.0.0.1:5173');
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    win.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 }
 
@@ -531,9 +626,11 @@ app.whenReady().then(() => {
   ipcMain.handle('orders:update-notes', async (_event, payload) => updateOrderNotes(payload || {}));
   ipcMain.handle('settings:get', async () => getSettings());
   ipcMain.handle('settings:save', async (_event, payload) => saveSettings(payload || {}));
-  ipcMain.handle('shopify:sync', async () => syncShopifyOrders());
+  ipcMain.handle('shopify:sync', async () => syncShopifyOrders('manual'));
 
   createWindow();
+  processReminders();
+  scheduleAutoSync(getSettings());
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -541,5 +638,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  if (autoSyncTimer) clearInterval(autoSyncTimer);
   if (process.platform !== 'darwin') app.quit();
 });

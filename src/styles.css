@@ -70,6 +70,33 @@ body {
   margin: 18px 0 0;
 }
 
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 18px;
+}
+
+.toolbar__search {
+  flex: 1 1 320px;
+}
+
+.toolbar__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #e5ddf3;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.toolbar__toggle input {
+  width: auto;
+}
+
 .hero-chip {
   display: inline-flex;
   align-items: center;
@@ -147,8 +174,11 @@ body {
 }
 
 .settings-form input,
+.settings-form select,
+.settings-form textarea,
 .status-editor select,
-.notes-editor textarea {
+.notes-editor textarea,
+.toolbar__search {
   width: 100%;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -159,8 +189,11 @@ body {
 }
 
 .settings-form input:focus,
+.settings-form select:focus,
+.settings-form textarea:focus,
 .status-editor select:focus,
-.notes-editor textarea:focus {
+.notes-editor textarea:focus,
+.toolbar__search:focus {
   outline: none;
   border-color: rgba(244, 114, 182, 0.55);
   box-shadow: 0 0 0 3px rgba(244, 114, 182, 0.12);
@@ -312,6 +345,7 @@ body {
   margin-top: 12px;
 }
 
+.settings-form textarea,
 .notes-editor textarea {
   resize: vertical;
   min-height: 84px;
