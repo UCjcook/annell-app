@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import ManualOrderForm from './components/ManualOrderForm';
+import NotesEditor from './components/NotesEditor';
 import SettingsPanel from './components/SettingsPanel';
 import StatusEditor from './components/StatusEditor';
 import { useOrders } from './hooks/useOrders';
@@ -6,7 +8,7 @@ import { useSettings } from './hooks/useSettings';
 import { groupOrders } from './lib/groupOrders';
 import { getToneForOrder } from './lib/statusTone';
 
-function OrderCard({ order, tone, onStatusChange, busy }) {
+function OrderCard({ order, tone, onStatusChange, onNotesSave, busy }) {
   return (
     <div className={`order-card tone-${tone}`}>
       <div className="order-card__top">
@@ -20,12 +22,12 @@ function OrderCard({ order, tone, onStatusChange, busy }) {
         <span>{order.daysLeft < 0 ? `${Math.abs(order.daysLeft)} late` : `${order.daysLeft} left`}</span>
       </div>
       <StatusEditor currentStatus={order.status} onChange={(value) => onStatusChange(order.id, value)} disabled={busy} />
-      {order.notes ? <p className="card-notes">{order.notes}</p> : null}
+      <NotesEditor initialValue={order.notes} onSave={(value) => onNotesSave(order.id, value)} disabled={busy} />
     </div>
   );
 }
 
-function Column({ title, tone, orders, onStatusChange, busyOrderId }) {
+function Column({ title, tone, orders, onStatusChange, onNotesSave, busyOrderId }) {
   return (
     <section className="column">
       <div className="column__header">
@@ -39,6 +41,7 @@ function Column({ title, tone, orders, onStatusChange, busyOrderId }) {
             order={order}
             tone={getToneForOrder(order) || tone}
             onStatusChange={onStatusChange}
+            onNotesSave={onNotesSave}
             busy={busyOrderId === order.id}
           />
         ))}
@@ -53,6 +56,7 @@ export default function App() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [busyOrderId, setBusyOrderId] = useState('');
+  const [manualBusy, setManualBusy] = useState(false);
 
   const grouped = useMemo(() => groupOrders(orders), [orders]);
 
@@ -70,10 +74,30 @@ export default function App() {
     }
   }
 
+  async function handleManualOrderSubmit(payload) {
+    try {
+      setManualBusy(true);
+      await window.orderUrgency.addManualOrder(payload);
+      await reload();
+    } finally {
+      setManualBusy(false);
+    }
+  }
+
   async function handleStatusChange(orderNumber, status) {
     try {
       setBusyOrderId(orderNumber);
       await window.orderUrgency.updateOrderStatus({ orderNumber, status });
+      await reload();
+    } finally {
+      setBusyOrderId('');
+    }
+  }
+
+  async function handleNotesSave(orderNumber, notes) {
+    try {
+      setBusyOrderId(orderNumber);
+      await window.orderUrgency.updateOrderNotes({ orderNumber, notes });
       await reload();
     } finally {
       setBusyOrderId('');
@@ -116,11 +140,13 @@ export default function App() {
         syncMessage={syncMessage}
       />
 
+      <ManualOrderForm onSubmit={handleManualOrderSubmit} busy={manualBusy} />
+
       <main className="board">
-        <Column title="New" tone="new" orders={grouped.new} onStatusChange={handleStatusChange} busyOrderId={busyOrderId} />
-        <Column title="Due Soon" tone="soon" orders={grouped.dueSoon} onStatusChange={handleStatusChange} busyOrderId={busyOrderId} />
-        <Column title="Overdue" tone="overdue" orders={grouped.overdue} onStatusChange={handleStatusChange} busyOrderId={busyOrderId} />
-        <Column title="Done" tone="done" orders={grouped.done} onStatusChange={handleStatusChange} busyOrderId={busyOrderId} />
+        <Column title="New" tone="new" orders={grouped.new} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
+        <Column title="Due Soon" tone="soon" orders={grouped.dueSoon} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
+        <Column title="Overdue" tone="overdue" orders={grouped.overdue} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
+        <Column title="Done" tone="done" orders={grouped.done} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
       </main>
     </div>
   );

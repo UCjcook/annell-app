@@ -11,6 +11,7 @@ export function groupOrders(rows) {
       id: row.orderNumber,
       sourceOrderId: row.sourceOrderId,
       source: row.sourcePlatform,
+      orderDate: row.orderDate,
       customer: row.customerName,
       item: row.itemsSummary,
       shipBy: row.shipByLabel,

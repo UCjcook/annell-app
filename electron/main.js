@@ -405,6 +405,41 @@ function processReminders() {
   }
 }
 
+function addManualOrder({ sourcePlatform, orderNumber, customerName, itemsSummary, daysUntilDue, status, notes }) {
+  if (!orderNumber || !customerName || !itemsSummary) {
+    throw new Error('orderNumber, customerName, and itemsSummary are required');
+  }
+  const now = new Date();
+  const shipByDate = new Date(now.getTime() + (Math.max(0, daysUntilDue || 0) * 86400000)).toISOString();
+  db.prepare(`
+    INSERT INTO orders (
+      source_platform, source_order_id, order_number, customer_name, items_summary,
+      order_date, ship_by_date, status, notes, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(source_platform, source_order_id) DO UPDATE SET
+      customer_name = excluded.customer_name,
+      items_summary = excluded.items_summary,
+      ship_by_date = excluded.ship_by_date,
+      status = excluded.status,
+      notes = excluded.notes,
+      updated_at = excluded.updated_at
+  `).run(
+    sourcePlatform || 'Manual',
+    orderNumber,
+    orderNumber,
+    customerName,
+    itemsSummary,
+    now.toISOString(),
+    shipByDate,
+    status || 'New',
+    notes || '',
+    now.toISOString(),
+    now.toISOString(),
+  );
+  processReminders();
+  return { ok: true };
+}
+
 function updateOrderStatus({ orderNumber, status }) {
   if (!orderNumber || !status) {
     throw new Error('orderNumber and status are required');
@@ -414,6 +449,18 @@ function updateOrderStatus({ orderNumber, status }) {
     SET status = ?, updated_at = ?
     WHERE order_number = ?
   `).run(status, new Date().toISOString(), orderNumber);
+  return { ok: true };
+}
+
+function updateOrderNotes({ orderNumber, notes }) {
+  if (!orderNumber) {
+    throw new Error('orderNumber is required');
+  }
+  db.prepare(`
+    UPDATE orders
+    SET notes = ?, updated_at = ?
+    WHERE order_number = ?
+  `).run(notes || '', new Date().toISOString(), orderNumber);
   return { ok: true };
 }
 
@@ -448,7 +495,9 @@ app.whenReady().then(() => {
     seedDemoData();
     return { ok: true };
   });
+  ipcMain.handle('orders:add-manual', async (_event, payload) => addManualOrder(payload || {}));
   ipcMain.handle('orders:update-status', async (_event, payload) => updateOrderStatus(payload || {}));
+  ipcMain.handle('orders:update-notes', async (_event, payload) => updateOrderNotes(payload || {}));
   ipcMain.handle('settings:get', async () => getSettings());
   ipcMain.handle('settings:save', async (_event, payload) => saveSettings(payload || {}));
   ipcMain.handle('shopify:sync', async () => syncShopifyOrders());
