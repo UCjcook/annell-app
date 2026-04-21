@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { normalizeStoreDomain } from '../lib/shopify';
+import { maskSecret } from '../lib/secrets';
 
 export default function SettingsPanel({ settings, onSave, onSync, syncing, syncMessage }) {
   const [storeDomain, setStoreDomain] = useState(settings?.shopifyStoreDomain || '');
@@ -77,6 +78,7 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
             value={clientSecret}
             onChange={(event) => setClientSecret(event.target.value)}
           />
+          {settings?.shopifyClientSecret ? <small>Saved secret: {maskSecret(settings.shopifyClientSecret)}</small> : null}
         </label>
 
         <label>
@@ -118,7 +120,7 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
       </form>
 
       <div className="settings-hint">
-        Uses Shopify client-credentials auth. Background sync runs while the desktop app is open, and the latest sync result is saved locally.
+        First-time setup: enter the Shopify store domain, client ID, and client secret, save, then click Sync Shopify orders. Background sync runs while the desktop app is open, and the latest sync result is saved locally.
       </div>
     </section>
   );
