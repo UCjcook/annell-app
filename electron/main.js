@@ -1,4 +1,4 @@
-const { app, BrowserWindow, nativeTheme, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, nativeTheme, ipcMain, Notification, dialog } = require('electron');
 const path = require('path');
 const Database = require('better-sqlite3');
 
@@ -7,6 +7,14 @@ let db;
 let mainWindow;
 let autoSyncTimer = null;
 let syncInFlight = null;
+
+function showFatalError(title, error) {
+  const message = error?.stack || error?.message || String(error);
+  console.error(`[fatal] ${title}\n${message}`);
+  if (app.isReady()) {
+    dialog.showErrorBox(title, message);
+  }
+}
 
 const SETTINGS_DEFAULTS = {
   shopifyStoreDomain: '',
@@ -62,7 +70,12 @@ function formatShipByLabel(daysLeft) {
 
 function initDb() {
   const userData = app.getPath('userData');
-  db = new Database(path.join(userData, 'order-urgency.db'));
+  try {
+    db = new Database(path.join(userData, 'order-urgency.db'));
+  } catch (error) {
+    showFatalError('Annell App failed to open its database', error);
+    throw error;
+  }
   db.pragma('journal_mode = WAL');
   db.exec(`
     CREATE TABLE IF NOT EXISTS orders (
@@ -614,30 +627,43 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  initDb();
+  try {
+    initDb();
 
-  ipcMain.handle('orders:list', async () => listOrders());
-  ipcMain.handle('orders:seed-demo', async () => {
-    seedDemoData();
-    return { ok: true };
-  });
-  ipcMain.handle('orders:add-manual', async (_event, payload) => addManualOrder(payload || {}));
-  ipcMain.handle('orders:update-status', async (_event, payload) => updateOrderStatus(payload || {}));
-  ipcMain.handle('orders:update-notes', async (_event, payload) => updateOrderNotes(payload || {}));
-  ipcMain.handle('settings:get', async () => getSettings());
-  ipcMain.handle('settings:save', async (_event, payload) => saveSettings(payload || {}));
-  ipcMain.handle('shopify:sync', async () => syncShopifyOrders('manual'));
+    ipcMain.handle('orders:list', async () => listOrders());
+    ipcMain.handle('orders:seed-demo', async () => {
+      seedDemoData();
+      return { ok: true };
+    });
+    ipcMain.handle('orders:add-manual', async (_event, payload) => addManualOrder(payload || {}));
+    ipcMain.handle('orders:update-status', async (_event, payload) => updateOrderStatus(payload || {}));
+    ipcMain.handle('orders:update-notes', async (_event, payload) => updateOrderNotes(payload || {}));
+    ipcMain.handle('settings:get', async () => getSettings());
+    ipcMain.handle('settings:save', async (_event, payload) => saveSettings(payload || {}));
+    ipcMain.handle('shopify:sync', async () => syncShopifyOrders('manual'));
 
-  createWindow();
-  processReminders();
-  scheduleAutoSync(getSettings());
+    createWindow();
+    processReminders();
+    scheduleAutoSync(getSettings());
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  } catch (error) {
+    showFatalError('Annell App failed to start', error);
+    app.quit();
+  }
 });
 
 app.on('window-all-closed', () => {
   if (autoSyncTimer) clearInterval(autoSyncTimer);
   if (process.platform !== 'darwin') app.quit();
+});
+
+process.on('uncaughtException', (error) => {
+  showFatalError('Annell App hit an unexpected error', error);
+});
+
+process.on('unhandledRejection', (error) => {
+  showFatalError('Annell App hit an unexpected promise error', error);
 });
