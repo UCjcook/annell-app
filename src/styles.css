@@ -78,6 +78,10 @@ body {
   margin-top: 18px;
 }
 
+.settings-panel {
+  max-width: 980px;
+}
+
 .toolbar__search {
   flex: 1 1 320px;
 }
@@ -397,6 +401,12 @@ body {
   margin-top: 12px;
 }
 
+.notes-editor__label {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: #e8def8;
+}
+
 .settings-form textarea,
 .notes-editor textarea {
   resize: vertical;
@@ -464,6 +474,15 @@ body {
 }
 
 @media (max-width: 1180px) {
+  .top-tabs {
+    display: flex;
+    width: 100%;
+  }
+
+  .top-tab {
+    flex: 1;
+  }
+
   .hero {
     flex-direction: column;
   }

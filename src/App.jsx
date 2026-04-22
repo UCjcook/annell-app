@@ -166,38 +166,45 @@ export default function App() {
   ];
 
   const lastSyncText = settings?.lastSyncAt ? formatTimestamp(settings.lastSyncAt) : '';
+  const isStoreConnected = Boolean(settings?.shopifyStoreDomain && settings?.shopifyClientId && settings?.shopifyClientSecret);
 
   return (
     <div className="app-shell">
       <header className="hero">
         <div className="hero-copy">
           <p className="eyebrow">Annell App</p>
-          <h1>Keep handmade orders calm, visible, and on time.</h1>
+          <h1>Today’s orders, without the panic spiral.</h1>
           <p className="subtext">
-            A gentle urgency board for handmade shops, designed to make deadlines obvious without turning the whole room into a panic spiral.
+            See what needs attention, update the status, and keep things moving.
           </p>
           <div className="hero-chips">
-            <span className="hero-chip">Shopify sync</span>
+            <span className="hero-chip">Shopify orders</span>
             <span className="hero-chip">Desktop reminders</span>
             <span className="hero-chip">Manual backup entry</span>
             {settings?.autoSyncEnabled ? <span className="hero-chip">Auto-sync on</span> : null}
           </div>
-          <div className="toolbar">
-            <input
-              className="toolbar__search"
-              type="search"
-              placeholder="Search order, customer, item, note..."
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <label className="toolbar__toggle">
-              <input type="checkbox" checked={showDone} onChange={(event) => setShowDone(event.target.checked)} />
-              <span>Show done</span>
-            </label>
-          </div>
+          {activeTab === 'orders' ? (
+            <div className="toolbar">
+              <input
+                className="toolbar__search"
+                type="search"
+                placeholder="Search order, customer, item, or note..."
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              <label className="toolbar__toggle">
+                <input type="checkbox" checked={showDone} onChange={(event) => setShowDone(event.target.checked)} />
+                <span>Show done</span>
+              </label>
+              <button className="button button-primary" type="button" onClick={handleSync} disabled={syncing || !isStoreConnected}>
+                {syncing ? 'Syncing…' : 'Sync now'}
+              </button>
+            </div>
+          ) : null}
           {loading ? <p className="status-note">Loading orders…</p> : null}
           {error ? <p className="status-error">{error}</p> : null}
           {!error && lastSyncText ? <p className="status-note">Last synced {lastSyncText}</p> : null}
+          {!isStoreConnected ? <p className="status-note">Connect your store in Settings to start pulling live orders.</p> : null}
         </div>
         <div className="hero-stats">
           {heroStats.map((stat) => (

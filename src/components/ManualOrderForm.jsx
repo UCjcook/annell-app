@@ -36,14 +36,15 @@ export default function ManualOrderForm({ onSubmit, busy }) {
     <section className="manual-order-panel">
       <div className="settings-panel__header">
         <div>
-          <p className="eyebrow">Fallback entry</p>
-          <h2>Add a manual order</h2>
+          <p className="eyebrow">Backup option</p>
+          <h2>Add an order by hand</h2>
+          <p className="settings-panel__subtext">Use this if an order needs to be tracked before it shows up automatically.</p>
         </div>
       </div>
 
       <form className="settings-form" onSubmit={handleSubmit}>
         <label>
-          <span>Platform</span>
+          <span>Store</span>
           <input value={form.sourcePlatform} onChange={(event) => updateField('sourcePlatform', event.target.value)} />
         </label>
         <label>
@@ -76,7 +77,7 @@ export default function ManualOrderForm({ onSubmit, busy }) {
         </label>
 
         <div className="settings-actions">
-          <button className="button" type="submit" disabled={busy}>{busy ? 'Adding…' : 'Add manual order'}</button>
+          <button className="button" type="submit" disabled={busy}>{busy ? 'Adding…' : 'Add order'}</button>
         </div>
       </form>
     </section>
