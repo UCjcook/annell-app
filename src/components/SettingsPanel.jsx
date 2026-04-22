@@ -41,8 +41,9 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
     <section className="settings-panel">
       <div className="settings-panel__header">
         <div>
-          <p className="eyebrow">Shopify connection</p>
-          <h2>Connect the live store</h2>
+          <p className="eyebrow">Store connection</p>
+          <h2>Connect your shop</h2>
+          <p className="settings-panel__subtext">Set this up once, then come back to the Orders tab for day-to-day work.</p>
         </div>
         <button className="button button-primary" onClick={onSync} disabled={syncing || !hasCredentials} type="button">
           {syncing ? 'Syncing…' : 'Sync Shopify orders'}
@@ -51,7 +52,7 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
 
       <form className="settings-form" onSubmit={handleSubmit}>
         <label>
-          <span>Store domain</span>
+          <span>Store address</span>
           <input
             type="text"
             placeholder="3dpossumprints.com"
@@ -61,7 +62,7 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
         </label>
 
         <label>
-          <span>Client ID</span>
+          <span>App ID</span>
           <input
             type="text"
             placeholder="Shopify client id"
@@ -71,7 +72,7 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
         </label>
 
         <label>
-          <span>Client secret</span>
+          <span>App secret</span>
           <input
             type="password"
             placeholder="shpss_..."
@@ -120,7 +121,7 @@ export default function SettingsPanel({ settings, onSave, onSync, syncing, syncM
       </form>
 
       <div className="settings-hint">
-        First-time setup: enter the Shopify store domain, client ID, and client secret, save, then click Sync Shopify orders. Background sync runs while the desktop app is open, and the latest sync result is saved locally.
+        First-time setup: enter the Shopify store address, app ID, and app secret, save, then click Sync Shopify orders. After that, most daily work happens in the Orders tab.
       </div>
     </section>
   );

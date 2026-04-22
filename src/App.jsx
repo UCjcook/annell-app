@@ -67,6 +67,7 @@ export default function App() {
   const [manualBusy, setManualBusy] = useState(false);
   const [query, setQuery] = useState('');
   const [showDone, setShowDone] = useState(true);
+  const [activeTab, setActiveTab] = useState('orders');
 
   useEffect(() => {
     if (!settings) return;
@@ -208,22 +209,35 @@ export default function App() {
         </div>
       </header>
 
-      <SettingsPanel
-        settings={settings}
-        onSave={save}
-        onSync={handleSync}
-        syncing={syncing}
-        syncMessage={syncMessage}
-      />
+      <nav className="top-tabs" aria-label="Main sections">
+        <button className={`top-tab ${activeTab === 'orders' ? 'top-tab--active' : ''}`} type="button" onClick={() => setActiveTab('orders')}>
+          Orders
+        </button>
+        <button className={`top-tab ${activeTab === 'settings' ? 'top-tab--active' : ''}`} type="button" onClick={() => setActiveTab('settings')}>
+          Settings
+        </button>
+      </nav>
 
-      <ManualOrderForm onSubmit={handleManualOrderSubmit} busy={manualBusy} />
+      {activeTab === 'orders' ? (
+        <>
+          <ManualOrderForm onSubmit={handleManualOrderSubmit} busy={manualBusy} />
 
-      <main className="board">
-        <Column title="New" tone="new" orders={grouped.new} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
-        <Column title="Due Soon" tone="soon" orders={grouped.dueSoon} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
-        <Column title="Overdue" tone="overdue" orders={grouped.overdue} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
-        {showDone ? <Column title="Done" tone="done" orders={grouped.done} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} /> : null}
-      </main>
+          <main className="board">
+            <Column title="New" tone="new" orders={grouped.new} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
+            <Column title="Due Soon" tone="soon" orders={grouped.dueSoon} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
+            <Column title="Overdue" tone="overdue" orders={grouped.overdue} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} />
+            {showDone ? <Column title="Done" tone="done" orders={grouped.done} onStatusChange={handleStatusChange} onNotesSave={handleNotesSave} busyOrderId={busyOrderId} /> : null}
+          </main>
+        </>
+      ) : (
+        <SettingsPanel
+          settings={settings}
+          onSave={save}
+          onSync={handleSync}
+          syncing={syncing}
+          syncMessage={syncMessage}
+        />
+      )}
     </div>
   );
 }
