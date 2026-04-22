@@ -60,7 +60,7 @@ function Column({ title, tone, orders, onStatusChange, onNotesSave, busyOrderId 
 
 export default function App() {
   const { orders, loading, error, reload, setError } = useOrders();
-  const { settings, save } = useSettings();
+  const { settings, save, testConnection } = useSettings();
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [busyOrderId, setBusyOrderId] = useState('');
@@ -240,6 +240,7 @@ export default function App() {
         <SettingsPanel
           settings={settings}
           onSave={save}
+          onTestConnection={testConnection}
           onSync={handleSync}
           syncing={syncing}
           syncMessage={syncMessage}

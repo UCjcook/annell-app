@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('orderUrgency', {
   updateOrderNotes: (payload) => ipcRenderer.invoke('orders:update-notes', payload),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (payload) => ipcRenderer.invoke('settings:save', payload),
+  testShopifyConnection: (payload) => ipcRenderer.invoke('shopify:test-connection', payload),
   syncShopifyOrders: () => ipcRenderer.invoke('shopify:sync'),
   onSyncState: (callback) => {
     const handler = (_event, payload) => callback(payload);

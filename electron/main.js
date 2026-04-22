@@ -205,11 +205,60 @@ async function getShopifyAccessToken(settings) {
   return payload.access_token;
 }
 
-async function fetchShopifyOrders(settings) {
+async function runShopifyGraphQL(settings, query, variables = {}) {
   const storeDomain = settings.shopifyStoreDomain;
   const accessToken = await getShopifyAccessToken(settings);
 
   const response = await fetch(`https://${storeDomain}/admin/api/2025-01/graphql.json`, {
+     method: 'POST',
+     headers: {
+       'Content-Type': 'application/json',
+       'X-Shopify-Access-Token': accessToken,
+     },
+     body: JSON.stringify({
+-      query: SHOPIFY_ORDERS_QUERY,
+-      variables: { first: 50 },
++      query,
++      variables,
+     }),
+   });
+ 
+   if (!response.ok) {
+     const body = await response.text();
+     throw new Error(`Shopify sync failed (${response.status}): ${body}`);
+   }
+ 
+   const payload = await response.json();
+   if (payload.errors?.length) {
+     throw new Error(payload.errors.map((entry) => entry.message).join('; '));
+   }
++
++   return payload;
++}
++
++async function fetchShopifyOrders(settings) {
++  const payload = await runShopifyGraphQL(settings, SHOPIFY_ORDERS_QUERY, { first: 50 });
+ 
+   return payload.data?.orders?.nodes || [];
+ }
++
++async function testShopifyConnection(nextSettings = {}) {
++  const settings = normalizeSettings(nextSettings);
++  const payload = await runShopifyGraphQL(settings, `#graphql
++    query TestConnection {
++      shop {
++        name
++        primaryDomain { host }
++      }
++    }
++  `);
++  return {
++    ok: true,
++    shopName: payload.data?.shop?.name || 'Connected store',
++    shopHost: payload.data?.shop?.primaryDomain?.host || settings.shopifyStoreDomain,
++    message: `Connected to ${payload.data?.shop?.name || settings.shopifyStoreDomain}.`,
++  };
++}
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -640,6 +689,7 @@ app.whenReady().then(() => {
     ipcMain.handle('orders:update-notes', async (_event, payload) => updateOrderNotes(payload || {}));
     ipcMain.handle('settings:get', async () => getSettings());
     ipcMain.handle('settings:save', async (_event, payload) => saveSettings(payload || {}));
+    ipcMain.handle('shopify:test-connection', async (_event, payload) => testShopifyConnection(payload || {}));
     ipcMain.handle('shopify:sync', async () => syncShopifyOrders('manual'));
 
     createWindow();

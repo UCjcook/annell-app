@@ -28,5 +28,9 @@ export function useSettings() {
     return saved;
   }
 
-  return { settings, loading, save };
+  async function testConnection(nextSettings) {
+    return window.orderUrgency.testShopifyConnection(nextSettings);
+  }
+
+  return { settings, loading, save, testConnection };
 }
