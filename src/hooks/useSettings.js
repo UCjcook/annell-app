@@ -32,5 +32,19 @@ export function useSettings() {
     return window.orderUrgency.testShopifyConnection(nextSettings);
   }
 
-  return { settings, loading, save, testConnection };
+  async function connectEtsy(nextSettings) {
+    const result = await window.orderUrgency.connectEtsy(nextSettings);
+    const next = await window.orderUrgency.getSettings();
+    setSettings(next);
+    return result;
+  }
+
+  async function syncEtsyOrders() {
+    const result = await window.orderUrgency.syncEtsyOrders();
+    const next = await window.orderUrgency.getSettings();
+    setSettings(next);
+    return result;
+  }
+
+  return { settings, loading, save, testConnection, connectEtsy, syncEtsyOrders };
 }

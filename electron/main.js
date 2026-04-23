@@ -1,6 +1,7 @@
 const { app, BrowserWindow, nativeTheme, ipcMain, Notification, dialog } = require('electron');
 const path = require('path');
 const Database = require('better-sqlite3');
+const { connectEtsyAndFetchReceipts } = require('./etsy-oauth');
 
 const isDev = !app.isPackaged;
 let db;
@@ -21,6 +22,18 @@ const SETTINGS_DEFAULTS = {
   shopifyClientId: '',
   shopifyClientSecret: '',
   shopifyProductionDays: 5,
+  etsyClientId: '',
+  etsyShopId: '',
+  etsyRedirectUri: '',
+  etsyAccessToken: '',
+  etsyRefreshToken: '',
+  etsyTokenType: '',
+  etsyTokenExpiresAt: '',
+  etsyConnectedAt: '',
+  etsyLastSyncAt: '',
+  etsyLastSyncImported: 0,
+  etsyLastSyncStatus: 'idle',
+  etsyLastSyncMessage: '',
   autoSyncEnabled: false,
   autoSyncIntervalMinutes: 15,
   lastSyncAt: '',
@@ -110,7 +123,7 @@ function initDb() {
 }
 
 function parseSettingValue(key, value) {
-  if (['shopifyProductionDays', 'autoSyncIntervalMinutes', 'lastSyncImported'].includes(key)) {
+  if (['shopifyProductionDays', 'autoSyncIntervalMinutes', 'lastSyncImported', 'etsyLastSyncImported'].includes(key)) {
     return Number.parseInt(value, 10) || SETTINGS_DEFAULTS[key];
   }
   if (key === 'autoSyncEnabled') {
@@ -155,6 +168,18 @@ function normalizeSettings(nextSettings) {
   return {
     ...merged,
     shopifyProductionDays: Math.max(1, Number.parseInt(merged.shopifyProductionDays, 10) || SETTINGS_DEFAULTS.shopifyProductionDays),
+    etsyClientId: String(merged.etsyClientId || ''),
+    etsyShopId: String(merged.etsyShopId || ''),
+    etsyRedirectUri: String(merged.etsyRedirectUri || ''),
+    etsyAccessToken: String(merged.etsyAccessToken || ''),
+    etsyRefreshToken: String(merged.etsyRefreshToken || ''),
+    etsyTokenType: String(merged.etsyTokenType || ''),
+    etsyTokenExpiresAt: String(merged.etsyTokenExpiresAt || ''),
+    etsyConnectedAt: String(merged.etsyConnectedAt || ''),
+    etsyLastSyncAt: String(merged.etsyLastSyncAt || ''),
+    etsyLastSyncImported: Number.parseInt(merged.etsyLastSyncImported, 10) || 0,
+    etsyLastSyncStatus: String(merged.etsyLastSyncStatus || 'idle'),
+    etsyLastSyncMessage: String(merged.etsyLastSyncMessage || ''),
     autoSyncEnabled: Boolean(merged.autoSyncEnabled),
     autoSyncIntervalMinutes: Math.max(5, Number.parseInt(merged.autoSyncIntervalMinutes, 10) || SETTINGS_DEFAULTS.autoSyncIntervalMinutes),
     lastSyncImported: Number.parseInt(merged.lastSyncImported, 10) || 0,
@@ -316,6 +341,72 @@ function clearDemoOrders() {
     DELETE FROM orders
     WHERE notes LIKE 'demo:%'
   `).run();
+}
+
+async function connectEtsy(nextSettings = {}) {
+  const settings = normalizeSettings(nextSettings);
+  const result = await connectEtsyAndFetchReceipts({
+    clientId: settings.etsyClientId,
+    scopes: ['transactions_r', 'shops_r'],
+    productionDays: settings.shopifyProductionDays,
+  });
+
+  saveSettings({
+    ...result.connection,
+    etsyLastSyncAt: new Date().toISOString(),
+    etsyLastSyncImported: result.localOrders.length,
+    etsyLastSyncStatus: 'ok',
+    etsyLastSyncMessage: `Imported ${result.localOrders.length} Etsy order${result.localOrders.length === 1 ? '' : 's'}.`,
+  });
+
+  if (result.localOrders.length > 0) {
+    clearDemoOrders();
+    upsertOrders(result.localOrders);
+    processReminders();
+  }
+
+  return {
+    ok: true,
+    imported: result.localOrders.length,
+    message: `Connected Etsy and imported ${result.localOrders.length} order${result.localOrders.length === 1 ? '' : 's'}.`,
+  };
+}
+
+async function syncEtsyOrders() {
+  const settings = getSettings();
+  if (!settings.etsyClientId || !settings.etsyAccessToken || !settings.etsyShopId) {
+    throw new Error('Etsy is not connected yet');
+  }
+
+  const { fetchEtsyOpenReceipts, mapEtsyReceiptToLocalOrder } = require('./etsy-oauth');
+  const receiptsPayload = await fetchEtsyOpenReceipts({
+    apiKey: settings.etsyClientId,
+    accessToken: settings.etsyAccessToken,
+    shopId: settings.etsyShopId,
+    limit: 50,
+  });
+
+  const receipts = Array.isArray(receiptsPayload?.results) ? receiptsPayload.results : [];
+  const localOrders = receipts.map((receipt) => mapEtsyReceiptToLocalOrder(receipt, settings.shopifyProductionDays));
+
+  if (localOrders.length > 0) {
+    clearDemoOrders();
+    upsertOrders(localOrders);
+    processReminders();
+  }
+
+  saveSettings({
+    etsyLastSyncAt: new Date().toISOString(),
+    etsyLastSyncImported: localOrders.length,
+    etsyLastSyncStatus: 'ok',
+    etsyLastSyncMessage: `Imported ${localOrders.length} Etsy order${localOrders.length === 1 ? '' : 's'}.`,
+  });
+
+  return {
+    ok: true,
+    imported: localOrders.length,
+    message: `Imported ${localOrders.length} Etsy order${localOrders.length === 1 ? '' : 's'}.`,
+  };
 }
 
 async function syncShopifyOrders(trigger = 'manual') {
@@ -664,6 +755,8 @@ app.whenReady().then(() => {
     ipcMain.handle('settings:get', async () => getSettings());
     ipcMain.handle('settings:save', async (_event, payload) => saveSettings(payload || {}));
     ipcMain.handle('shopify:test-connection', async (_event, payload) => testShopifyConnection(payload || {}));
+    ipcMain.handle('etsy:connect', async (_event, payload) => connectEtsy(payload || {}));
+    ipcMain.handle('etsy:sync', async () => syncEtsyOrders());
     ipcMain.handle('shopify:sync', async () => syncShopifyOrders('manual'));
 
     createWindow();
