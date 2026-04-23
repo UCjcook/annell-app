@@ -1,6 +1,6 @@
 {
   "name": "order-urgency-app",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Windows-first order urgency board for Shopify and Etsy sellers",
   "main": "electron/main.js",
   "scripts": {
