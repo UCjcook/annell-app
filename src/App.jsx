@@ -60,7 +60,7 @@ function Column({ title, tone, orders, onStatusChange, onNotesSave, busyOrderId 
 
 export default function App() {
   const { orders, loading, error, reload, setError } = useOrders();
-  const { settings, save, testConnection } = useSettings();
+  const { settings, save, testConnection, connectEtsy, syncEtsyOrders } = useSettings();
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [busyOrderId, setBusyOrderId] = useState('');
@@ -241,6 +241,8 @@ export default function App() {
           settings={settings}
           onSave={save}
           onTestConnection={testConnection}
+          onConnectEtsy={connectEtsy}
+          onSyncEtsy={syncEtsyOrders}
           onSync={handleSync}
           syncing={syncing}
           syncMessage={syncMessage}
