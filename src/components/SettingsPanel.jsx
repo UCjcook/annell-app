@@ -24,40 +24,6 @@ export default function SettingsPanel({ settings, onSave, onTestConnection, onSy
   }, [settings]);
 
   async function handleSubmit(event) {
-     event.preventDefault();
-     const payload = {
-       shopifyStoreDomain: normalizeStoreDomain(storeDomain),
-       shopifyClientId: clientId.trim(),
-       shopifyClientSecret: clientSecret.trim(),
-       shopifyProductionDays: Math.max(1, Number.parseInt(productionDays, 10) || 5),
-       autoSyncEnabled,
-       autoSyncIntervalMinutes: Math.max(5, Number.parseInt(autoSyncIntervalMinutes, 10) || 15),
-     };
-     await onSave(payload);
-     setSavedNotice('Saved locally.');
-     setTimeout(() => setSavedNotice(''), 2000);
-   }
-+
-+  async function handleTestConnection() {
-+    setConnectionNotice('');
-+    setConnectionError('');
-+    setTestingConnection(true);
-+    try {
-+      const result = await onTestConnection({
-+        shopifyStoreDomain: normalizeStoreDomain(storeDomain),
-+        shopifyClientId: clientId.trim(),
-+        shopifyClientSecret: clientSecret.trim(),
-+        shopifyProductionDays: Math.max(1, Number.parseInt(productionDays, 10) || 5),
-+        autoSyncEnabled,
-+        autoSyncIntervalMinutes: Math.max(5, Number.parseInt(autoSyncIntervalMinutes, 10) || 15),
-+      });
-+      setConnectionNotice(result.message || 'Connection looks good.');
-+    } catch (error) {
-+      setConnectionError(error.message || 'Could not connect to Shopify.');
-+    } finally {
-+      setTestingConnection(false);
-+    }
-+  }
     event.preventDefault();
     const payload = {
       shopifyStoreDomain: normalizeStoreDomain(storeDomain),
@@ -70,6 +36,27 @@ export default function SettingsPanel({ settings, onSave, onTestConnection, onSy
     await onSave(payload);
     setSavedNotice('Saved locally.');
     setTimeout(() => setSavedNotice(''), 2000);
+  }
+
+  async function handleTestConnection() {
+    setConnectionNotice('');
+    setConnectionError('');
+    setTestingConnection(true);
+    try {
+      const result = await onTestConnection({
+        shopifyStoreDomain: normalizeStoreDomain(storeDomain),
+        shopifyClientId: clientId.trim(),
+        shopifyClientSecret: clientSecret.trim(),
+        shopifyProductionDays: Math.max(1, Number.parseInt(productionDays, 10) || 5),
+        autoSyncEnabled,
+        autoSyncIntervalMinutes: Math.max(5, Number.parseInt(autoSyncIntervalMinutes, 10) || 15),
+      });
+      setConnectionNotice(result.message || 'Connection looks good.');
+    } catch (error) {
+      setConnectionError(error.message || 'Could not connect to Shopify.');
+    } finally {
+      setTestingConnection(false);
+    }
   }
 
   const hasCredentials = Boolean(storeDomain.trim() && clientId.trim() && clientSecret.trim());
